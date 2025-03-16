@@ -1,0 +1,228 @@
+<!-- File: templates/reports.html -->
+{% extends "layout.html" %}
+
+{% block title %}Intelligence Reports{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Intelligence Reports</h5>
+            </div>
+            <div class="card-body">
+                {% for report in reports %}
+                <div class="card report-card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ report.title }}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">{{ report.publication_date }} - Source: {{ report.source }}</h6>
+                        <p class="card-text">{{ report.summary }}</p>
+                        {% if report.tags %}
+                        <div class="mb-2">
+                            {% for tag in report.tags.split(',') %}
+                                <span class="badge bg-info">{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% if report.url %}
+                        <a href="{{ report.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-link-45deg"></i> View Original
+                        </a>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-secondary" onclick="showReportDetails({{ report.id }})">
+                            <i class="bi bi-eye"></i> View Details
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Pagination -->
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% set pages = (total / per_page) | round(0, 'ceil') | int %}
+                        
+                        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('reports', page=page-1) if page > 1 else '#' }}">Previous</a>
+                        </li>
+                        
+                        {% for p in range(1, pages + 1) %}
+                            {% if p <= 5 or p >= pages - 4 or (p >= page - 2 and p <= page + 2) %}
+                                <li class="page-item {% if p == page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('reports', page=p) }}">{{ p }}</a>
+                                </li>
+                            {% elif p == 6 or p == pages - 5 %}
+                                <li class="page-item disabled">
+                                    <a class="page-link" href="#">...</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <li class="page-item {% if page >= pages %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('reports', page=page+1) if page < pages else '#' }}">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Detail Modal -->
+<div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reportModalLabel">Report Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="reportDetailsContainer">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a id="reportSourceLink" href="#" target="_blank" class="btn btn-primary">View Source</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showReportDetails(reportId) {
+        // Show the modal
+        const reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
+        reportModal.show();
+        
+        // Make API call to get report details
+        fetch(`/api/reports/${reportId}`)
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('reportDetailsContainer');
+                
+                // Update the modal title
+                document.getElementById('reportModalLabel').textContent = data.title;
+                
+                // Set the source link
+                const sourceLink = document.getElementById('reportSourceLink');
+                if (data.url) {
+                    sourceLink.href = data.url;
+                    sourceLink.style.display = 'block';
+                } else {
+                    sourceLink.style.display = 'none';
+                }
+                
+                // Create the report content
+                let html = `
+                    <div class="mb-4">
+                        <h6 class="text-muted">Published: ${data.publication_date} by ${data.source}</h6>
+                        
+                        <hr>
+                        
+                        <div class="mt-3">
+                            <h6>Summary</h6>
+                            <p>${data.summary}</p>
+                        </div>
+                `;
+                
+                // Add content if available
+                if (data.content) {
+                    html += `
+                        <div class="mt-3">
+                            <h6>Content</h6>
+                            <div>${data.content}</div>
+                        </div>
+                    `;
+                }
+                
+                // Add tags if available
+                if (data.tags) {
+                    html += `
+                        <div class="mt-3">
+                            <h6>Tags</h6>
+                            <div>
+                    `;
+                    
+                    data.tags.split(',').forEach(tag => {
+                        html += `<span class="badge bg-info me-1">${tag.trim()}</span>`;
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Add associated IOCs if available
+                html += `
+                    <div class="mt-4">
+                        <h6>Associated IOCs</h6>
+                        <div id="reportIOCs">
+                            <div class="text-center">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <small>Loading IOCs...</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                html += '</div>';
+                
+                container.innerHTML = html;
+                
+                // Fetch associated IOCs
+                fetch(`/api/reports/${reportId}/iocs`)
+                    .then(response => response.json())
+                    .then(iocs => {
+                        const iocsContainer = document.getElementById('reportIOCs');
+                        
+                        if (iocs.length === 0) {
+                            iocsContainer.innerHTML = '<div class="alert alert-info">No IOCs associated with this report.</div>';
+                            return;
+                        }
+                        
+                        let iocsHtml = '<table class="table table-sm table-striped">';
+                        iocsHtml += `
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Value</th>
+                                    <th>First Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                        `;
+                        
+                        iocs.forEach(ioc => {
+                            iocsHtml += `
+                                <tr>
+                                    <td><span class="badge bg-secondary">${ioc.ioc_type}</span></td>
+                                    <td>${ioc.value}</td>
+                                    <td>${ioc.first_seen}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        iocsHtml += '</tbody></table>';
+                        iocsContainer.innerHTML = iocsHtml;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching IOCs:', error);
+                        document.getElementById('reportIOCs').innerHTML = 
+                            '<div class="alert alert-danger">Error loading IOCs.</div>';
+                    });
+            })
+            .catch(error => {
+                console.error('Error fetching report details:', error);
+                document.getElementById('reportDetailsContainer').innerHTML = 
+                    '<div class="alert alert-danger">Error loading report details.</div>';
+            });
+    }
+</script>
+{% endblock %}

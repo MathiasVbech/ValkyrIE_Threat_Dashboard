@@ -1,0 +1,184 @@
+<!-- File: templates/admin/add_ioc.html -->
+{% extends "layout.html" %}
+
+{% block title %}Add New IOC{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Add New Indicator of Compromise</h5>
+            </div>
+            <div class="card-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    {% for category, message in messages %}
+                      <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+                
+                <form method="post">
+                    <div class="mb-3">
+                        <label for="ioc_type" class="form-label">IOC Type</label>
+                        <select class="form-select" id="ioc_type" name="ioc_type" required>
+                            <option value="">Select Type</option>
+                            <option value="ip">IP Address</option>
+                            <option value="domain">Domain</option>
+                            <option value="url">URL</option>
+                            <option value="hash">File Hash</option>
+                            <option value="email">Email</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="value" class="form-label">Value</label>
+                        <input type="text" class="form-control" id="value" name="value" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="source" class="form-label">Source</label>
+                        <input type="text" class="form-control" id="source" name="source" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confidence" class="form-label">Confidence (0-100)</label>
+                        <input type="number" class="form-control" id="confidence" name="confidence" min="0" max="100" value="75">
+                    </div>
+                    <div class="mb-3">
+                        <label for="malware_family" class="form-label">Malware Family (optional)</label>
+                        <input type="text" class="form-control" id="malware_family" name="malware_family">
+                    </div>
+                    <div class="mb-3">
+                        <label for="threat_actor" class="form-label">Threat Actor (optional)</label>
+                        <input type="text" class="form-control" id="threat_actor" name="threat_actor">
+                    </div>
+                    <div class="mb-3">
+                        <label for="campaign" class="form-label">Campaign (optional)</label>
+                        <input type="text" class="form-control" id="campaign" name="campaign">
+                    </div>
+                    <div class="mb-3">
+                        <label for="tags" class="form-label">Tags (comma-separated)</label>
+                        <input type="text" class="form-control" id="tags" name="tags" placeholder="malware,phishing,etc">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h5>MITRE ATT&CK Mapping</h5>
+                        <p class="text-muted">Select up to 3 techniques that are associated with this IOC</p>
+                        
+                        <div id="mitreMappings">
+                            <div class="mapping-container border rounded p-3 mb-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Technique ID</label>
+                                    <input type="text" class="form-control" name="technique_id[]" placeholder="e.g., T1566">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Technique Name</label>
+                                    <input type="text" class="form-control" name="technique_name[]" placeholder="e.g., Phishing">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Tactic</label>
+                                    <select class="form-select" name="tactic[]">
+                                        <option value="">Select Tactic</option>
+                                        <option value="initial-access">Initial Access</option>
+                                        <option value="execution">Execution</option>
+                                        <option value="persistence">Persistence</option>
+                                        <option value="privilege-escalation">Privilege Escalation</option>
+                                        <option value="defense-evasion">Defense Evasion</option>
+                                        <option value="credential-access">Credential Access</option>
+                                        <option value="discovery">Discovery</option>
+                                        <option value="lateral-movement">Lateral Movement</option>
+                                        <option value="collection">Collection</option>
+                                        <option value="command-and-control">Command and Control</option>
+                                        <option value="exfiltration">Exfiltration</option>
+                                        <option value="impact">Impact</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" id="addMapping" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-plus"></i> Add Another Technique
+                        </button>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary">Add IOC</button>
+                        <a href="{{ url_for('iocs') }}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const addMappingBtn = document.getElementById('addMapping');
+        const mitreMappings = document.getElementById('mitreMappings');
+        
+        let mappingCount = 1;
+        const MAX_MAPPINGS = 3;
+        
+        addMappingBtn.addEventListener('click', function() {
+            if (mappingCount < MAX_MAPPINGS) {
+                const newMapping = document.createElement('div');
+                newMapping.className = 'mapping-container border rounded p-3 mb-3';
+                newMapping.innerHTML = `
+                    <div class="d-flex justify-content-end mb-2">
+                        <button type="button" class="btn btn-outline-danger btn-sm remove-mapping">
+                            <i class="bi bi-x"></i> Remove
+                        </button>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Technique ID</label>
+                        <input type="text" class="form-control" name="technique_id[]" placeholder="e.g., T1566">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Technique Name</label>
+                        <input type="text" class="form-control" name="technique_name[]" placeholder="e.g., Phishing">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tactic</label>
+                        <select class="form-select" name="tactic[]">
+                            <option value="">Select Tactic</option>
+                            <option value="initial-access">Initial Access</option>
+                            <option value="execution">Execution</option>
+                            <option value="persistence">Persistence</option>
+                            <option value="privilege-escalation">Privilege Escalation</option>
+                            <option value="defense-evasion">Defense Evasion</option>
+                            <option value="credential-access">Credential Access</option>
+                            <option value="discovery">Discovery</option>
+                            <option value="lateral-movement">Lateral Movement</option>
+                            <option value="collection">Collection</option>
+                            <option value="command-and-control">Command and Control</option>
+                            <option value="exfiltration">Exfiltration</option>
+                            <option value="impact">Impact</option>
+                        </select>
+                    </div>
+                `;
+                
+                mitreMappings.appendChild(newMapping);
+                mappingCount++;
+                
+                // Check if we've reached the maximum
+                if (mappingCount >= MAX_MAPPINGS) {
+                    addMappingBtn.disabled = true;
+                }
+                
+                // Add event listener for the remove button
+                newMapping.querySelector('.remove-mapping').addEventListener('click', function() {
+                    mitreMappings.removeChild(newMapping);
+                    mappingCount--;
+                    addMappingBtn.disabled = false;
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}

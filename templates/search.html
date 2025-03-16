@@ -1,0 +1,161 @@
+<!-- File: templates/search.html -->
+{% extends "layout.html" %}
+
+{% block title %}Search{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card search-container">
+            <div class="card-body">
+                <form action="/search" method="get" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="text" class="form-control form-control-lg" name="q" value="{{ query }}" placeholder="Search IOCs, reports, techniques...">
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select form-select-lg" name="type">
+                            <option value="">All Types</option>
+                            <option value="ip" {% if ioc_type == 'ip' %}selected{% endif %}>IP Address</option>
+                            <option value="domain" {% if ioc_type == 'domain' %}selected{% endif %}>Domain</option>
+                            <option value="url" {% if ioc_type == 'url' %}selected{% endif %}>URL</option>
+                            <option value="hash" {% if ioc_type == 'hash' %}selected{% endif %}>File Hash</option>
+                            <option value="email" {% if ioc_type == 'email' %}selected{% endif %}>Email</option>
+                            <option value="other" {% if ioc_type == 'other' %}selected{% endif %}>Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-lg w-100">Search</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if query %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Search Results for "{{ query }}"</h5>
+            </div>
+            <div class="card-body">
+                {% if results|length > 0 %}
+                    <p>Found {{ results|length }} results.</p>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Value</th>
+                                    <th>Source</th>
+                                    <th>First Seen</th>
+                                    <th>Last Seen</th>
+                                    <th>Tags</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in results %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ result.ioc_type }}</span></td>
+                                    <td>{{ result.value }}</td>
+                                    <td>{{ result.source }}</td>
+                                    <td>{{ result.first_seen }}</td>
+                                    <td>{{ result.last_seen }}</td>
+                                    <td>
+                                        {% if result.tags %}
+                                            {% for tag in result.tags.split(',') %}
+                                                <span class="badge bg-info">{{ tag }}</span>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="showRelated('{{ result.value }}')">
+                                            <i class="bi bi-graph-up"></i> Related
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> No results found for "{{ query }}".
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal for related IOCs -->
+<div class="modal fade" id="relatedModal" tabindex="-1" aria-labelledby="relatedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="relatedModalLabel">Related IOCs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="relatedIOCsContainer">
+                <!-- Related IOCs will be loaded here -->
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showRelated(iocValue) {
+        // Show the modal
+        const relatedModal = new bootstrap.Modal(document.getElementById('relatedModal'));
+        relatedModal.show();
+        
+        // Make API call to get related IOCs
+        fetch(`/api/iocs/related?value=${encodeURIComponent(iocValue)}`)
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('relatedIOCsContainer');
+                
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="alert alert-info">No related IOCs found.</div>';
+                    return;
+                }
+                
+                let html = '<div class="list-group">';
+                data.forEach(ioc => {
+                    html += `
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">${ioc.value}</h5>
+                                <small>${ioc.ioc_type}</small>
+                            </div>
+                            <p class="mb-1">Source: ${ioc.source}</p>
+                            <small>First seen: ${ioc.first_seen}</small>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                
+                container.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error fetching related IOCs:', error);
+                document.getElementById('relatedIOCsContainer').innerHTML = 
+                    '<div class="alert alert-danger">Error loading related IOCs.</div>';
+            });
+    }
+</script>
+{% endblock %}

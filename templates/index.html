@@ -1,0 +1,243 @@
+<!-- File: templates/index.html -->
+{% extends "layout.html" %}
+
+{% block title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Executive Summary Report</h5>
+                <h6 class="card-subtitle text-muted">{{ exec_report.period }}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <h5 class="card-title">New IOCs</h5>
+                                <h2>{{ exec_report.total_new_iocs }}</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <h5 class="card-title">New Reports</h5>
+                                <h2>{{ exec_report.new_reports }}</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <h5 class="card-title">Top Tactic</h5>
+                                <h6>{{ exec_report.top_tactics[0].tactic if exec_report.top_tactics else "N/A" }}</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card">
+                            <div class="card-body">
+                                <h5 class="card-title">Top Technique</h5>
+                                <h6>{{ exec_report.top_techniques[0].technique_id if exec_report.top_techniques else "N/A" }}</h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">IOCs by Type</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="iocTypeChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">MITRE Tactics Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="mitreTacticsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">New IOCs Timeline (Last 7 Days)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="iocTimelineChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Top Techniques</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {% for technique in exec_report.top_techniques %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ technique.technique_id }}: {{ technique.technique_name }}
+                        <span class="badge bg-primary rounded-pill">{{ technique.count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">IOCs by Source</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="iocSourceChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Fetch IOC stats from API
+        fetch('/api/stats/iocs')
+            .then(response => response.json())
+            .then(data => {
+                // IOC by Type chart
+                const iocTypeCtx = document.getElementById('iocTypeChart').getContext('2d');
+                new Chart(iocTypeCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(data.by_type),
+                        datasets: [{
+                            data: Object.values(data.by_type),
+                            backgroundColor: [
+                                '#4e73df',
+                                '#1cc88a',
+                                '#36b9cc',
+                                '#f6c23e',
+                                '#e74a3b'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right'
+                            }
+                        }
+                    }
+                });
+                
+                // IOC by Source chart
+                const iocSourceCtx = document.getElementById('iocSourceChart').getContext('2d');
+                new Chart(iocSourceCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(data.by_source),
+                        datasets: [{
+                            label: 'Number of IOCs',
+                            data: Object.values(data.by_source),
+                            backgroundColor: '#4e73df'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+                
+                // IOC Timeline chart
+                const timelineLabels = Object.keys(data.timeline);
+                const timelineData = Object.values(data.timeline);
+                
+                const iocTimelineCtx = document.getElementById('iocTimelineChart').getContext('2d');
+                new Chart(iocTimelineCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timelineLabels,
+                        datasets: [{
+                            label: 'New IOCs',
+                            data: timelineData,
+                            borderColor: '#4e73df',
+                            backgroundColor: 'rgba(78, 115, 223, 0.05)',
+                            tension: 0.1,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            });
+            
+        // Fetch MITRE stats from API
+        fetch('/api/stats/mitre')
+            .then(response => response.json())
+            .then(data => {
+                // MITRE Tactics chart
+                const mitreTacticsCtx = document.getElementById('mitreTacticsChart').getContext('2d');
+                new Chart(mitreTacticsCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: Object.keys(data.by_tactic),
+                        datasets: [{
+                            label: 'Techniques per Tactic',
+                            data: Object.values(data.by_tactic),
+                            backgroundColor: 'rgba(78, 115, 223, 0.2)',
+                            borderColor: '#4e73df',
+                            pointBackgroundColor: '#4e73df'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            r: {
+                                angleLines: {
+                                    display: true
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+    });
+</script>
+{% endblock %}

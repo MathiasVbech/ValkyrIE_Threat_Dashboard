@@ -1,0 +1,313 @@
+<!-- File: templates/mitre.html -->
+{% extends "layout.html" %}
+
+{% block title %}MITRE ATT&CK Framework{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">MITRE ATT&CK Navigator</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <select class="form-select" id="tacticFilter">
+                            <option value="">All Tactics</option>
+                            {% for tactic, count in mitre_stats.by_tactic.items() %}
+                                <option value="{{ tactic }}">{{ tactic }} ({{ count }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="techniqueSearch" placeholder="Search techniques...">
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex justify-content-end">
+                            <button class="btn btn-primary" id="exportBtn">
+                                <i class="bi bi-download"></i> Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mitre-map">
+                    <div class="row">
+                        <!-- This will be populated with techniques by the JavaScript code -->
+                        <div id="mitreContainer" class="d-flex flex-wrap">
+                            <div class="text-center w-100 p-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p>Loading MITRE ATT&CK data...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Top Techniques</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Technique ID</th>
+                                <th>Name</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for technique in mitre_stats.top_techniques %}
+                            <tr>
+                                <td>{{ technique.technique_id }}</td>
+                                <td>{{ technique.technique_name }}</td>
+                                <td>{{ technique.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Tactics Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="tacticChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Technique Detail Modal -->
+<div class="modal fade" id="techniqueModal" tabindex="-1" aria-labelledby="techniqueModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="techniqueModalLabel">Technique Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h4 id="techniqueName"></h4>
+                <p><strong>ID:</strong> <span id="techniqueId"></span></p>
+                <p><strong>Tactic:</strong> <span id="techniqueTactic"></span></p>
+                
+                <div class="mt-4">
+                    <h5>Associated IOCs</h5>
+                    <div id="techniqueIOCs">
+                        <div class="alert alert-info">No associated IOCs found.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a id="mitreLink" href="#" target="_blank" class="btn btn-primary">View on MITRE</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch MITRE data and render the matrix
+    fetch('/api/stats/mitre')
+        .then(response => response.json())
+        .then(data => {
+            // Debug - log the data structure
+            console.log('MITRE data received:', data);
+            
+            // Create tactics chart
+            const tacticCtx = document.getElementById('tacticChart').getContext('2d');
+            
+            // Check if the chart library is available
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js is not loaded');
+                return;
+            }
+            
+            new Chart(tacticCtx, {
+                type: 'bar',  // Change to 'bar' from 'horizontalBar' which is deprecated
+                data: {
+                    labels: Object.keys(data.by_tactic),
+                    datasets: [{
+                        label: 'Techniques',
+                        data: Object.values(data.by_tactic),
+                        backgroundColor: '#4e73df'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',  // This makes it a horizontal bar chart
+                    scales: {
+                        x: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+            
+            // Populate MITRE map
+            renderMitreMap(data);
+        })
+        .catch(error => {
+            console.error('Error fetching MITRE data:', error);
+            document.getElementById('mitreContainer').innerHTML = 
+                '<div class="alert alert-danger">Error loading MITRE ATT&CK data. Please try refreshing the page.</div>';
+        });
+    });
+    
+    function renderMitreMap(data) {
+    console.log('Rendering MITRE map with data:', data);
+    const container = document.getElementById('mitreContainer');
+    container.innerHTML = '';
+    
+    // Debug - visualize the data structure we're working with
+    if (!data.top_techniques) {
+        console.error('No top_techniques property in data');
+        container.innerHTML = '<div class="alert alert-info">No MITRE ATT&CK data available. Data structure missing top_techniques.</div>';
+        return;
+    }
+    
+    console.log('top_techniques:', data.top_techniques);
+    
+    // Create a technique cell for each
+    data.top_techniques.forEach(tech => {
+        const severityClass = tech.count > 5 ? 'high-severity' : 
+                          tech.count > 2 ? 'medium-severity' : 'low-severity';
+        
+        const cell = document.createElement('div');
+        cell.className = `technique-cell ${severityClass}`;
+        cell.dataset.techniqueId = tech.technique_id;
+        cell.dataset.techniqueName = tech.technique_name;
+        cell.dataset.count = tech.count;
+        
+        cell.innerHTML = `
+            <div>
+                <strong>${tech.technique_id}</strong><br>
+                <small>${tech.technique_name}</small><br>
+                <span class="badge bg-dark">${tech.count}</span>
+            </div>
+        `;
+        
+        cell.addEventListener('click', function() {
+            showTechniqueDetails(tech.technique_id, tech.technique_name);
+        });
+        
+        container.appendChild(cell);
+    });
+    
+    // Remove loading spinner if it exists
+    const loadingSpinner = container.querySelector('.spinner-border');
+    if (loadingSpinner) {
+        loadingSpinner.parentElement.remove();
+    }
+}
+    
+    function filterTechniques() {
+        const tactic = document.getElementById('tacticFilter').value;
+        const search = document.getElementById('techniqueSearch').value.toLowerCase();
+        
+        const cells = document.querySelectorAll('.technique-cell');
+        cells.forEach(cell => {
+            const id = cell.dataset.techniqueId.toLowerCase();
+            const name = cell.dataset.techniqueName.toLowerCase();
+            
+            // Filter by tactic if selected
+            let tacticMatch = !tactic || cell.classList.contains(tactic);
+            
+            // Filter by search term
+            let searchMatch = !search || id.includes(search) || name.includes(search);
+            
+            // Show/hide based on filters
+            cell.style.display = (tacticMatch && searchMatch) ? 'flex' : 'none';
+        });
+    }
+    
+    function showTechniqueDetails(id, name, tactic) {
+    document.getElementById('techniqueId').textContent = id;
+    document.getElementById('techniqueName').textContent = name;
+    document.getElementById('techniqueTactic').textContent = tactic || 'Unknown';
+    document.getElementById('mitreLink').href = `https://attack.mitre.org/techniques/${id}/`;
+    
+    // Show the modal
+    const techniqueModal = new bootstrap.Modal(document.getElementById('techniqueModal'));
+    techniqueModal.show();
+    
+    // Fetch associated IOCs
+    fetch(`/api/mitre/technique/${id}/iocs`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('techniqueIOCs');
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No associated IOCs found.</div>';
+                return;
+            }
+            
+            let html = '<div class="list-group">';
+            data.forEach(ioc => {
+                html += `
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">${ioc.value}</h5>
+                            <small>${ioc.ioc_type}</small>
+                        </div>
+                        <p class="mb-1">Source: ${ioc.source}</p>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error fetching IOCs:', error);
+            document.getElementById('techniqueIOCs').innerHTML = 
+                '<div class="alert alert-danger">Error loading associated IOCs.</div>';
+        });
+    }
+    
+    function exportMitreData() {
+        // Fetch all the data
+        fetch('/api/stats/mitre/export')
+            .then(response => response.json())
+            .then(data => {
+                // Convert to CSV
+                let csv = 'Technique ID,Technique Name,Tactic,Count\n';
+                
+                data.forEach(item => {
+                    csv += `"${item.technique_id}","${item.technique_name}","${item.tactic}",${item.count}\n`;
+                });
+                
+                // Create download link
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.setAttribute('hidden', '');
+                a.setAttribute('href', url);
+                a.setAttribute('download', 'mitre_techniques.csv');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            })
+            .catch(error => {
+                console.error('Error exporting data:', error);
+                alert('Error exporting data. Please try again.');
+            });
+    }
+</script>
+{% endblock %}
