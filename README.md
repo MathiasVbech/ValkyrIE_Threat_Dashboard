@@ -36,7 +36,7 @@ The tool was built to support threat intelligence operations where in-depth anal
 1. Clone the repository:
    ```
    git clone https://github.com/MathiasVbech/ValkyrIE_Threat_Dashboard.git
-   cd valkyrie
+   cd ValkyrIE_Threat_Dashboard
    ```
 
 2. Install required packages:
